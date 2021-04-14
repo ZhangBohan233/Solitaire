@@ -53,10 +53,47 @@ public class SolitaireGame {
         return true;
     }
 
-    public void autoFinishNext() {
-        for (SolitaireDeck deck : mainArea) {
-
+    public SolitaireMove nextAutoMove() {
+        for (int c = 0; c < mainArea.length; ++c) {
+            SolitaireDeck deck = mainArea[c];
+            Card surface = deck.getSurfaceCard();
+            if (SolitaireMove.movableToFinished(this, surface)) {  // null check inside this
+                CardLocation.FinishedLocation dst = new CardLocation.FinishedLocation(
+                        this,
+                        finishedArea[surface.getSuit()].getSurfaceCard(),
+                        surface.getSuit());
+                CardLocation.MainLocation src = new CardLocation.MainLocation(
+                        this,
+                        surface,
+                        c,
+                        deck.size() - 1);
+                return new SolitaireMove.MainToFinished(
+                        this,
+                        src,
+                        dst
+                );
+            }
         }
+        for (int i = 0; i < spaceArea.length; ++i) {
+            Card card = spaceArea[i];
+            if (SolitaireMove.movableToFinished(this, card)) {
+                CardLocation.FinishedLocation dst = new CardLocation.FinishedLocation(
+                        this,
+                        finishedArea[card.getSuit()].getSurfaceCard(),
+                        card.getSuit());
+                CardLocation.SpaceLocation src = new CardLocation.SpaceLocation(
+                        this,
+                        card,
+                        i
+                );
+                return new SolitaireMove.SpaceToFinished(
+                        this,
+                        src,
+                        dst
+                );
+            }
+        }
+        throw new SolitaireException("Unexpected error, cannot auto finish.");
     }
 
     private void initGame() {
@@ -96,6 +133,10 @@ public class SolitaireGame {
         return builder.toString();
     }
 
+    public boolean movable(SolitaireMove move) {
+        return move.movable();
+    }
+
     public boolean move(SolitaireMove move) {
         boolean suc = innerMove(move);
         if (suc) {
@@ -116,6 +157,10 @@ public class SolitaireGame {
     public void undo() {
         SolitaireMove lastMove = moves.removeLast();
         lastMove.undoMove();
+    }
+
+    public SolitaireMove getLastDoneMove() {
+        return moves.getLast();
     }
 
     public boolean wining() {

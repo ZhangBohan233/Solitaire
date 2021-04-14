@@ -1,5 +1,9 @@
 package trashsoftware.solitaire.fxml.controls;
 
+import javafx.animation.KeyFrame;
+import javafx.animation.Timeline;
+import javafx.event.ActionEvent;
+import javafx.event.EventHandler;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.fxml.Initializable;
@@ -8,21 +12,23 @@ import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
+import javafx.scene.control.Alert;
 import javafx.scene.control.MenuItem;
 import javafx.scene.input.MouseEvent;
-import javafx.scene.layout.AnchorPane;
 import javafx.scene.paint.Paint;
-import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.TextAlignment;
 import javafx.stage.Stage;
+import javafx.util.Duration;
 import trashsoftware.solitaire.Main;
 import trashsoftware.solitaire.core.solitaireGame.*;
 import trashsoftware.solitaire.util.Configs;
 
 import java.io.IOException;
 import java.net.URL;
-import java.util.*;
+import java.util.ResourceBundle;
+import java.util.Timer;
+import java.util.TimerTask;
 
 public class GameView implements Initializable {
     private static final Paint RED = Paint.valueOf("red");
@@ -51,11 +57,10 @@ public class GameView implements Initializable {
     @FXML
     Canvas canvas;
     @FXML
-    AnchorPane basePane;
-    @FXML
     MenuItem undoItem, autoFinishItem;
     private double height = cardFullHeight * 6;
-    private double frameTime = 20.0;
+    private double animationDuration = 500.0;
+    private double frameTime = 25.0;
     private double firstRowY;
     private GraphicsContext graphicsContext;
     private Stage stage;
@@ -66,6 +71,7 @@ public class GameView implements Initializable {
     private boolean finished = false;
 
     private DraggedCards draggedCards;
+    private AnimatingCards animatingCards;
     private double curMouseX, curMouseY;
     private long lastDragTime;
 
@@ -88,16 +94,47 @@ public class GameView implements Initializable {
 
     @FXML
     void undoAction() {
-        game.undo();
-        setButtonsStatus();
-        draw();
+        if (game.hasMoveToUndo()) {  // double check
+            SolitaireMove move = game.getLastDoneMove();
+
+            CardLocation dst = move.getDstLocation();
+            CardLocation realDstLocation;
+            if (dst instanceof CardLocation.MainLocation) {
+                // in a move to main, the actual dst location is the next row
+                CardLocation.MainLocation mainLocation = (CardLocation.MainLocation) dst;
+                realDstLocation = new CardLocation.MainLocation(
+                        game,
+                        mainLocation.getCard(),
+                        mainLocation.getCol(),
+                        mainLocation.getRow() + 1);
+            } else realDstLocation = dst.reloadLocation();
+
+            animation(realDstLocation, move.getSrcLocation(), e -> {
+                game.undo();
+                animatingCards = null;
+                setButtonsStatus();
+                draw();
+            });
+        }
     }
 
     @FXML
     void autoFinishAction() {
-        while (!game.wining()) {
+        autoFinishOneStep();
+    }
 
-        }
+    private void autoFinishOneStep() {
+        SolitaireMove nextMove = game.nextAutoMove();
+        animation(nextMove.getSrcLocation(), nextMove.getDstLocation(), e -> {
+            game.move(nextMove);
+            animatingCards = null;
+            draw();
+            if (!game.wining()) {
+                autoFinishOneStep();
+            } else {
+                checkWin();
+            }
+        });
     }
 
     @FXML
@@ -146,6 +183,7 @@ public class GameView implements Initializable {
             draw();
             return;
         }
+        if (animatingCards != null) return;
 
         double x = event.getX();
         double y = event.getY();
@@ -160,43 +198,49 @@ public class GameView implements Initializable {
             started = true;
             timer.scheduleAtFixedRate(new GameTimerTask(), 1000, 1000);
         }
+        if (animatingCards != null) return;
 
         double x = event.getX();
         double y = event.getY();
         CardLocation location = getCardLocation(x, y);
-        if (location == null || location.card == null) {
+        if (location == null || location.getCard() == null) {
             draggedCards = INVALID_DRAG;
             return;
         }
 
-        if (location instanceof MainLocation) {
-            MainLocation mainLocation = (MainLocation) location;
-            double[] cardTopLeft = xyOfMain(mainLocation.col, mainLocation.row);
-            SolitaireDeck deck = game.getMainArea()[mainLocation.col];
-            if (deck.draggable(mainLocation.row)) {
-                SolitaireDeck dragging = new SolitaireDeck(deck.subList(mainLocation.row, deck.size()));
-                draggedCards = new DragFromMain(mainLocation,
-                        x - cardTopLeft[0],
-                        y - cardTopLeft[1],
+        double[] cardTopLeft = location.cardLeftXY(this);
+        draggedCards = createDraggingCards(
+                location,
+                x - cardTopLeft[0],
+                y - cardTopLeft[1]);
+        if (draggedCards != INVALID_DRAG) stage.getScene().setCursor(Cursor.CLOSED_HAND);
+    }
+
+    private DraggedCards createDraggingCards(CardLocation location,
+                                             double mouseXFromCardLeft,
+                                             double mouseYFromCardTop) {
+        if (location instanceof CardLocation.MainLocation) {
+            CardLocation.MainLocation mainLocation = (CardLocation.MainLocation) location;
+            SolitaireDeck deck = game.getMainArea()[mainLocation.getCol()];
+            if (deck.draggable(mainLocation.getRow())) {
+                SolitaireDeck dragging = new SolitaireDeck(deck.subList(mainLocation.getRow(), deck.size()));
+                return new DragFromMain(mainLocation,
+                        mouseXFromCardLeft,
+                        mouseYFromCardTop,
                         dragging);
-                stage.getScene().setCursor(Cursor.CLOSED_HAND);
-            } else draggedCards = INVALID_DRAG;
-        } else if (location instanceof SpaceLocation) {
-            SpaceLocation spaceLocation = (SpaceLocation) location;
-            double[] cardTopLeft = xyOfSpace(spaceLocation.pos);
-            draggedCards = new DragFromSpace(spaceLocation,
-                    x - cardTopLeft[0],
-                    y - cardTopLeft[1]);
-            stage.getScene().setCursor(Cursor.CLOSED_HAND);
-        } else if (location instanceof FinishedLocation) {
-            FinishedLocation finishedLocation = (FinishedLocation) location;
-            double[] cardTopLeft = xyOfFinished(finishedLocation.pos);
-            draggedCards = new DragFromFinished(finishedLocation,
-                    x - cardTopLeft[0],
-                    y - cardTopLeft[1]);
-            stage.getScene().setCursor(Cursor.CLOSED_HAND);
+            } else return INVALID_DRAG;
+        } else if (location instanceof CardLocation.SpaceLocation) {
+            CardLocation.SpaceLocation spaceLocation = (CardLocation.SpaceLocation) location;
+            return new DragFromSpace(spaceLocation,
+                    mouseXFromCardLeft,
+                    mouseYFromCardTop);
+        } else if (location instanceof CardLocation.FinishedLocation) {
+            CardLocation.FinishedLocation finishedLocation = (CardLocation.FinishedLocation) location;
+            return new DragFromFinished(finishedLocation,
+                    mouseXFromCardLeft,
+                    mouseYFromCardTop);
         } else {
-            draggedCards = INVALID_DRAG;
+            return INVALID_DRAG;
         }
     }
 
@@ -241,12 +285,36 @@ public class GameView implements Initializable {
     }
 
     private boolean animatedMoveAction(SolitaireMove move) {
-        if (game.move(move)) {
-            System.out.println("Animated move");
-            setButtonsStatus();
+        if (game.movable(move)) {
+            CardLocation realDstLocation;
+            if (move.getDstLocation() instanceof CardLocation.MainLocation) {
+                // in a move to main, the actual dst location is the next row
+                CardLocation.MainLocation mainLocation = (CardLocation.MainLocation) move.getDstLocation();
+                realDstLocation = new CardLocation.MainLocation(
+                        game,
+                        mainLocation.getCard(),
+                        mainLocation.getCol(),
+                        mainLocation.getRow() + 1);
+            } else realDstLocation = move.getDstLocation();
+
+            animation(move.getSrcLocation(), realDstLocation, e -> {
+                game.move(move);
+                animatingCards = null;
+                draw();
+                setButtonsStatus();
+            });
+
             return true;
         }
         return false;
+    }
+
+    private void animation(CardLocation src, CardLocation dst, EventHandler<ActionEvent> onFinished) {
+        Timeline animationLine = new Timeline();
+        animationLine.setCycleCount((int) (animationDuration / frameTime));
+        animationLine.getKeyFrames().add(new KeyFrame(Duration.millis(frameTime), new MoveAnimation(src, dst)));
+        animationLine.setOnFinished(onFinished);
+        animationLine.play();
     }
 
     private void singleClick(double x, double y) {
@@ -254,7 +322,7 @@ public class GameView implements Initializable {
 
         if (selected == null) {
             // newly selected
-            if (newSelection != null && newSelection.card != null) {
+            if (newSelection != null && newSelection.getCard() != null) {
                 selected = newSelection;
                 draw();
             }
@@ -271,11 +339,12 @@ public class GameView implements Initializable {
                 SolitaireMove move = selected.createMove(newSelection);
                 if (animatedMoveAction(move)) {
                     checkWin();
+                    selected = null;
                 } else {
                     selected = newSelection;
                     draw();
-                    return;
                 }
+                return;
             }
             // clear selection
             selected = null;
@@ -286,12 +355,15 @@ public class GameView implements Initializable {
     private void doubleClick(double x, double y) {
         CardLocation newSelection = getCardLocation(x, y);
 
-        if (newSelection != null && newSelection.card != null) {
-            int pos = newSelection.card.getSuit();
-            FinishedLocation fl = new FinishedLocation(game.getFinishedArea()[pos].getSurfaceCard(), pos);
+        if (newSelection != null && newSelection.getCard() != null) {
+            int pos = newSelection.getCard().getSuit();
+            CardLocation.FinishedLocation fl =
+                    new CardLocation.FinishedLocation(game, game.getFinishedArea()[pos].getSurfaceCard(), pos);
             SolitaireMove move = newSelection.createMove(fl);
             if (animatedMoveAction(move)) {
                 checkWin();
+                selected = null;
+                return;
             }
         }
         selected = null;
@@ -316,17 +388,22 @@ public class GameView implements Initializable {
             if (posInSpace == NOT_IN_AREA) {
                 int posInFinished = posOfFinished(x, y);
                 if (posInFinished >= 0) {
-                    newSelection = new FinishedLocation(game.getFinishedArea()[posInFinished].getSurfaceCard(),
+                    newSelection = new CardLocation.FinishedLocation(game,
+                            game.getFinishedArea()[posInFinished].getSurfaceCard(),
                             posInFinished);
                 }
             } else if (posInSpace >= 0) {
-                newSelection = new SpaceLocation(game.getSpaceArea()[posInSpace], posInSpace);
+                newSelection = new CardLocation.SpaceLocation(game,
+                        game.getSpaceArea()[posInSpace], posInSpace);
             }
         } else if (mainCr.length == 1) {
-            newSelection = new MainLocation(null, mainCr[0], game.getMainArea()[mainCr[0]].size());
+            newSelection = new CardLocation.MainLocation(game, null, mainCr[0], game.getMainArea()[mainCr[0]].size());
         } else if (mainCr.length == 2) {
-            if (mainCr[1] == -1) newSelection = new MainLocation(null, mainCr[0], mainCr[1]);
-            else newSelection = new MainLocation(game.getMainArea()[mainCr[0]].get(mainCr[1]), mainCr[0], mainCr[1]);
+            if (mainCr[1] == -1) newSelection = new CardLocation.MainLocation(game, null, mainCr[0], mainCr[1]);
+            else newSelection = new CardLocation.MainLocation(game,
+                    game.getMainArea()[mainCr[0]].get(mainCr[1]),
+                    mainCr[0],
+                    mainCr[1]);
         }
         return newSelection;
     }
@@ -341,8 +418,13 @@ public class GameView implements Initializable {
 
     private void checkWin() {
         if (game.wining()) {
-            System.out.println("Wining!");
             finish();
+            Alert alert = new Alert(Alert.AlertType.INFORMATION);
+            alert.setHeaderText(Main.getBundle().getString("winMessage"));
+            alert.setContentText(
+                    String.format(Main.getBundle().getString("winMsgFmt"), timerText, game.getStepsCount()));
+            alert.initOwner(stage);
+            alert.show();
         }
     }
 
@@ -353,8 +435,14 @@ public class GameView implements Initializable {
     }
 
     private void setButtonsStatus() {
-        undoItem.setDisable(finished || !game.hasMoveToUndo());
-        autoFinishItem.setDisable(finished || !game.canAutoFinish());
+        undoItem.setDisable(finished
+                || !game.hasMoveToUndo()
+                || animatingCards != null
+        );
+        autoFinishItem.setDisable(finished
+                || !game.canAutoFinish()
+                || animatingCards != null
+        );
     }
 
     private void drawGrid() {
@@ -390,21 +478,21 @@ public class GameView implements Initializable {
         }
     }
 
-    private double[] xyOfMain(int col, int row) {
+    public double[] xyOfMain(int col, int row) {
         return new double[]{
                 mainSpacing + mainCardOccupyWidth() * col,
                 firstRowY + row * cardGapHeight
         };
     }
 
-    private double[] xyOfSpace(int pos) {
+    public double[] xyOfSpace(int pos) {
         return new double[]{
                 width - mainSpacing + cardBorder * 2 - (4 - pos) * areaCardOccupyWidth(),
                 areaSpacing + cardBorder
         };
     }
 
-    private double[] xyOfFinished(int pos) {
+    public double[] xyOfFinished(int pos) {
         return new double[]{
                 mainSpacing + areaCardOccupyWidth() * pos,
                 areaSpacing + cardBorder
@@ -520,6 +608,23 @@ public class GameView implements Initializable {
         }
     }
 
+    private void drawAnimatingCards() {
+        if (animatingCards != null) {
+            if (animatingCards.cards instanceof DragFromMain) {
+                DragFromMain drag = (DragFromMain) animatingCards.cards;
+                double y = animatingCards.y;
+                double x = animatingCards.x;
+                for (Card card : drag.dragged) {
+                    drawCard(card, x, y);
+                    y += cardGapHeight;
+                }
+            } else if (animatingCards.cards instanceof SingleCardDrag) {
+                SingleCardDrag drag = (SingleCardDrag) animatingCards.cards;
+                drawCard(drag.srcLocation.getCard(), animatingCards.x, animatingCards.y);
+            }
+        }
+    }
+
     private void drawDraggingCards() {
         if (draggedCards != null) {
             if (draggedCards instanceof DragFromMain) {
@@ -534,7 +639,7 @@ public class GameView implements Initializable {
                 SingleCardDrag drag = (SingleCardDrag) draggedCards;
                 double y = curMouseY - drag.mouseYFromCardTop;
                 double x = curMouseX - drag.mouseXFromCardLeft;
-                drawCard(drag.srcLocation.card, x, y);
+                drawCard(drag.srcLocation.getCard(), x, y);
             }
         }
     }
@@ -569,6 +674,7 @@ public class GameView implements Initializable {
 
     private void drawFixedCard(Card card, double x, double y) {
         if (draggedCards != null && draggedCards.cardIsDragging(card)) return;
+        if (animatingCards != null && animatingCards.cards.cardIsDragging(card)) return;
 
         drawCard(card, x, y);
     }
@@ -580,6 +686,7 @@ public class GameView implements Initializable {
         drawCardsInFinished();
         drawCardsInSpace();
         drawDraggingCards();
+        drawAnimatingCards();
     }
 
     private void startNewGame() {
@@ -609,49 +716,6 @@ public class GameView implements Initializable {
         canvas.setOnMouseClicked(this::onCanvasClicked);
         canvas.setOnMouseDragged(this::onCanvasDragged);
         canvas.setOnDragDetected(this::onCanvasDragStarted);
-    }
-
-
-    private abstract static class CardLocation {
-        final Card card;  // nullable
-
-        CardLocation(Card card) {
-            this.card = card;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-
-            CardLocation that = (CardLocation) o;
-
-            return Objects.equals(card, that.card);
-        }
-
-        @Override
-        public int hashCode() {
-            return card != null ? card.hashCode() : 0;
-        }
-
-        abstract SolitaireMove createMove(CardLocation dstLocation);
-
-        abstract boolean isSelected(Card card);
-    }
-
-    private abstract static class SingleCardLocation extends CardLocation {
-        final int pos;
-
-        SingleCardLocation(Card card, int pos) {
-            super(card);
-
-            this.pos = pos;
-        }
-
-        @Override
-        boolean isSelected(Card card) {
-            return card == this.card;
-        }
     }
 
     private abstract static class DraggedCards {
@@ -684,13 +748,14 @@ public class GameView implements Initializable {
     }
 
     private static abstract class SingleCardDrag extends DraggedCards {
+
         SingleCardDrag(CardLocation srcLocation, double mouseXFromCardLeft, double mouseYFromCardTop) {
             super(srcLocation, mouseXFromCardLeft, mouseYFromCardTop);  // srcLocation has a non-null card
         }
 
         @Override
         boolean cardIsDragging(Card card) {
-            return card.equals(srcLocation.card);
+            return card.equals(srcLocation.getCard());
         }
     }
 
@@ -718,105 +783,77 @@ public class GameView implements Initializable {
         boolean cardIsDragging(Card card) {
             return false;
         }
+
+        @Override
+        public String toString() {
+            return "Invalid drag";
+        }
     }
 
-    private class MainLocation extends CardLocation {
-        private final int col, row;
-        private final Set<Card> highlightedCards = new TreeSet<>();
+    private static class AnimatingCards {
+        final DraggedCards cards;
+        double x, y;
 
-        MainLocation(Card card, int col, int row) {
-            super(card);
-
-            this.col = col;
-            this.row = row;
-
-            if (card != null) {
-                highlightedCards.add(card);
-                SolitaireDeck deck = game.getMainArea()[col];
-                if (deck.draggable(row)) {
-                    for (int i = row + 1; i < deck.size(); ++i) {
-                        highlightedCards.add(deck.get(i));
-                    }
-                }
-            }
-        }
-
-        @Override
-        SolitaireMove createMove(CardLocation dstLocation) {
-            if (dstLocation instanceof MainLocation) {
-                return new SolitaireMove.MainToMain(game, col, row, ((MainLocation) dstLocation).col);
-            } else if (dstLocation instanceof SpaceLocation) {
-                return new SolitaireMove.MainToSpace(game, col, row, ((SpaceLocation) dstLocation).pos);
-            } else if (dstLocation instanceof FinishedLocation) {
-                return new SolitaireMove.MainToFinished(game, col, row, ((FinishedLocation) dstLocation).pos);
-            } else {
-                throw new SolitaireException();
-            }
-        }
-
-        @Override
-        boolean isSelected(Card card) {
-            return highlightedCards.contains(card);
+        AnimatingCards(DraggedCards cards, double initX, double initY) {
+            this.cards = cards;
+            this.x = initX;
+            this.y = initY;
         }
 
         @Override
         public String toString() {
-            return "MainLocation{" +
-                    "col=" + col +
-                    ", row=" + row +
+            return "AnimatingCards{" +
+                    "cards=" + cards +
+                    ", x=" + x +
+                    ", y=" + y +
                     '}';
         }
     }
 
-    private class SpaceLocation extends SingleCardLocation {
-        SpaceLocation(Card card, int pos) {
-            super(card, pos);
+    private class MoveAnimation implements EventHandler<ActionEvent> {
+
+        private final double xSpeed;
+        private final double ySpeed;
+
+        MoveAnimation(CardLocation srcLocation, CardLocation dstLocation) {
+            double[] srcXY = getXY(srcLocation);
+            double[] dstXY = getXY(dstLocation);
+
+            double srcX = srcXY[0];
+            double srcY = srcXY[1];
+            double dstX = dstXY[0];
+            double dstY = dstXY[1];
+
+            int frameCount = (int) (animationDuration / frameTime);
+            xSpeed = (dstX - srcX) / frameCount;
+            ySpeed = (dstY - srcY) / frameCount;
+
+            animatingCards = new AnimatingCards(
+                    createDraggingCards(srcLocation, 0.0, 0.0),
+                    srcX,
+                    srcY
+            );
+            setButtonsStatus();
         }
 
-        @Override
-        SolitaireMove createMove(CardLocation dstLocation) {
-            if (dstLocation instanceof MainLocation) {
-                return new SolitaireMove.SpaceToMain(game, pos, ((MainLocation) dstLocation).col);
-            } else if (dstLocation instanceof SpaceLocation) {
-                return new SolitaireMove.SpaceToSpace(game, pos, ((SpaceLocation) dstLocation).pos);
-            } else if (dstLocation instanceof FinishedLocation) {
-                return new SolitaireMove.SpaceToFinished(game, pos, ((FinishedLocation) dstLocation).pos);
+        private double[] getXY(CardLocation location) {
+            if (location instanceof CardLocation.MainLocation) {
+                CardLocation.MainLocation mainLocation = (CardLocation.MainLocation) location;
+                return xyOfMain(mainLocation.getCol(), mainLocation.getRow());
+            } else if (location instanceof CardLocation.SpaceLocation) {
+                return xyOfSpace(((CardLocation.SpaceLocation) location).getPos());
+            } else if (location instanceof CardLocation.FinishedLocation) {
+                return xyOfFinished(((CardLocation.FinishedLocation) location).getPos());
             } else {
-                throw new SolitaireException();
+                throw new SolitaireException("Unexpected location.");
             }
         }
 
         @Override
-        public String toString() {
-            return "SpaceLocation{" +
-                    "pos=" + pos +
-                    '}';
-        }
-    }
-
-    private class FinishedLocation extends SingleCardLocation {
-        FinishedLocation(Card card, int pos) {
-            super(card, pos);
-        }
-
-        @Override
-        SolitaireMove createMove(CardLocation dstLocation) {
-            if (dstLocation instanceof MainLocation) {
-                return new SolitaireMove.FinishedToMain(game, pos, ((MainLocation) dstLocation).col);
-            } else if (dstLocation instanceof SpaceLocation) {
-                return new SolitaireMove.FinishedToSpace(game, pos, ((SpaceLocation) dstLocation).pos);
-            } else if (dstLocation instanceof FinishedLocation) {
-                return new SolitaireMove.FinishedToFinished(game);
-            } else {
-                throw new SolitaireException();
-            }
-        }
-
-        @Override
-        public String toString() {
-            return "FinishedLocation{" +
-                    "pos=" + pos +
-                    '}';
+        public void handle(ActionEvent event) {
+            animatingCards.x += xSpeed;
+            animatingCards.y += ySpeed;
+            draw();
         }
     }
 

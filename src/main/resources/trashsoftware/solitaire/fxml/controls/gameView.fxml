@@ -22,6 +22,5 @@
         </Menu>
     </MenuBar>
     <Canvas fx:id="canvas"/>
-<!--    <AnchorPane fx:id="basePane"/>-->
 
 </VBox>
