@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.canvas.Canvas?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.layout.AnchorPane?>
+<VBox xmlns="http://javafx.com/javafx"
+      xmlns:fx="http://javafx.com/fxml"
+      fx:controller="trashsoftware.solitaire.fxml.controls.GameView"
+      prefHeight="600.0" prefWidth="900.0" alignment="TOP_CENTER">
+
+    <MenuBar>
+        <Menu text="%file">
+            <MenuItem text="%settings" onAction="#settingsAction"/>
+            <SeparatorMenuItem/>
+            <MenuItem text="%startNewGame" onAction="#newGameAction"/>
+            <MenuItem text="%restartGame" onAction="#restartGameAction"/>
+        </Menu>
+        <Menu text="%edit">
+            <MenuItem fx:id="undoItem" text="%undo" onAction="#undoAction" disable="true"/>
+            <MenuItem fx:id="autoFinishItem" text="%autoFinish" onAction="#autoFinishAction" disable="true"/>
+        </Menu>
+    </MenuBar>
+    <Canvas fx:id="canvas"/>
+<!--    <AnchorPane fx:id="basePane"/>-->
+
+</VBox>

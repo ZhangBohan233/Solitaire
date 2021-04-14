@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import java.lang.*?>
+<?import java.util.*?>
+<?import javafx.scene.*?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<?import javafx.geometry.Insets?>
+<GridPane xmlns="http://javafx.com/javafx"
+          xmlns:fx="http://javafx.com/fxml"
+          fx:controller="trashsoftware.solitaire.fxml.controls.SettingsView"
+          prefHeight="320.0" prefWidth="480.0" alignment="TOP_CENTER" vgap="10.0" hgap="10.0">
+    <padding>
+        <Insets topRightBottomLeft="10.0"/>
+    </padding>
+
+    <rowConstraints>
+        <RowConstraints valignment="TOP"/>
+        <RowConstraints/>
+        <RowConstraints vgrow="ALWAYS" valignment="TOP"/>
+        <RowConstraints maxHeight="40.0"/>
+    </rowConstraints>
+
+    <columnConstraints>
+        <ColumnConstraints percentWidth="50.0" halignment="RIGHT"/>
+        <ColumnConstraints percentWidth="50.0"/>
+    </columnConstraints>
+
+    <Label text="%difficulty"/>
+    <VBox alignment="CENTER_LEFT" spacing="5.0" GridPane.columnIndex="1">
+        <RadioButton fx:id="diff1Button" text="%diff1">
+            <toggleGroup>
+                <ToggleGroup fx:id="difficultyGroup"/>
+            </toggleGroup>
+        </RadioButton>
+        <RadioButton fx:id="diff2Button" text="%diff2">
+            <toggleGroup>
+                <fx:reference source="difficultyGroup"/>
+            </toggleGroup>
+        </RadioButton>
+        <RadioButton fx:id="diff3Button" text="%diff3" selected="true">
+            <toggleGroup>
+                <fx:reference source="difficultyGroup"/>
+            </toggleGroup>
+        </RadioButton>
+    </VBox>
+    <Separator GridPane.rowIndex="1" GridPane.columnSpan="2"/>
+    <CheckBox fx:id="casualModeBox" text="%casual" GridPane.rowIndex="2"/>
+    <HBox GridPane.rowIndex="3" GridPane.columnSpan="2" alignment="CENTER_RIGHT" spacing="10.0">
+        <Button text="%ok" onAction="#onConfirm"/>
+        <Button text="%cancel" onAction="#onCancel"/>
+    </HBox>
+
+</GridPane>
