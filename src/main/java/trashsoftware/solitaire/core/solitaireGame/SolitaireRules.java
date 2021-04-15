@@ -40,14 +40,6 @@ public class SolitaireRules {
     }
 
     public static int loadInitialFinishes() {
-        int level = Configs.getInt("difficultyLevel", 2);
-        switch (level) {
-            case 0:
-                return 3;
-            case 1:
-                return 1;
-            default:
-                return 0;
-        }
+        return Configs.getInt("initFinishes", 0);
     }
 }

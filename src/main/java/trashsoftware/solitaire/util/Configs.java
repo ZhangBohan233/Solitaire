@@ -14,6 +14,10 @@ public class Configs {
         writeMapFile(CONFIG_FILE, map);
     }
 
+    public static void writeConfig(String key, int value) {
+        writeConfig(key, String.valueOf(value));
+    }
+
     public static String getConfig(String key) {
         Map<String, String> map = readMapFile(CONFIG_FILE);
         return map.get(key);

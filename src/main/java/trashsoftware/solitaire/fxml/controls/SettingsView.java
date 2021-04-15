@@ -3,8 +3,7 @@ package trashsoftware.solitaire.fxml.controls;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
 import javafx.scene.control.CheckBox;
-import javafx.scene.control.RadioButton;
-import javafx.scene.control.ToggleGroup;
+import javafx.scene.control.ComboBox;
 import javafx.stage.Stage;
 import trashsoftware.solitaire.util.Configs;
 
@@ -13,9 +12,7 @@ import java.util.ResourceBundle;
 
 public class SettingsView implements Initializable {
     @FXML
-    ToggleGroup difficultyGroup;
-    @FXML
-    RadioButton diff1Button, diff2Button, diff3Button;
+    ComboBox<Integer> initFinishesBox;
     @FXML
     CheckBox casualModeBox;
 
@@ -34,8 +31,7 @@ public class SettingsView implements Initializable {
 
     @FXML
     void onConfirm() {
-        Configs.writeConfig("difficultyLevel",
-                String.valueOf(difficultyGroup.getToggles().indexOf(difficultyGroup.getSelectedToggle())));
+        Configs.writeConfig("initFinishes", initFinishesBox.getSelectionModel().getSelectedItem());
         Configs.writeConfig("casual",
                 String.valueOf(casualModeBox.isSelected()));
         parent.newGameAction();
@@ -49,11 +45,13 @@ public class SettingsView implements Initializable {
     }
 
     private void addListeners() {
-        int curDifficulty = Configs.getInt("difficultyLevel", 2);
-        if (curDifficulty < 0 || curDifficulty >= difficultyGroup.getToggles().size()) {
-            difficultyGroup.selectToggle(diff3Button);
+        initFinishesBox.getItems().addAll(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+
+        int curDifficulty = Configs.getInt("initFinishes", 0);
+        if (curDifficulty < 0 || curDifficulty >= initFinishesBox.getItems().size()) {
+            initFinishesBox.getSelectionModel().select(0);
         } else {
-            difficultyGroup.selectToggle(difficultyGroup.getToggles().get(curDifficulty));
+            initFinishesBox.getSelectionModel().select(curDifficulty);
         }
         boolean isCasual = Configs.getBoolean("casual");
         casualModeBox.setSelected(isCasual);
