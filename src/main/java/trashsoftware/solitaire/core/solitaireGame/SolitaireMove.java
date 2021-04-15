@@ -30,6 +30,11 @@ public abstract class SolitaireMove {
         }
     }
 
+    @Override
+    public String toString() {
+        return String.format("%s{%s to %s}", getClass().getSimpleName(), getSrcLocation(), getDstLocation());
+    }
+
     /**
      * Perform this move, returns {@code true} if the move is a success, {@code false} otherwise.
      * <p>
@@ -88,7 +93,7 @@ public abstract class SolitaireMove {
                     Card srcSurface = srcDeck.getSurfaceCard();
                     return dstDeck.appendable(srcSurface);
                 }
-            } else if (srcLocation.getRow() < srcDeck.size() - 1) {
+            } else if (srcLocation.getRow() < srcDeck.size() - 1 && srcDeck.draggable(srcLocation.getRow())) {
                 int moveCount = srcDeck.size() - srcLocation.getRow();
                 if (game.rules.isStrict()) {
                     if (moveCount <= game.getMaxMoveLength(dstDeck.isEmpty())) {
@@ -111,43 +116,6 @@ public abstract class SolitaireMove {
             } else {
                 return false;
             }
-//            SolitaireDeck srcDeck = game.mainArea[srcLocation.getCol()];
-//            SolitaireDeck dstDeck = game.mainArea[dstLocation.getCol()];
-//            Card dstSurface = dstDeck.getSurfaceCard();
-//            if (srcLocation.getRow() == srcDeck.size() - 1) {
-//                if (dstSurface == null) {
-//                    dstDeck.add(srcDeck.removeSurfaceCard());
-//                    return true;
-//                } else {
-//                    Card srcSurface = srcDeck.getSurfaceCard();
-//                    if (dstDeck.appendable(srcSurface)) {
-//                        dstDeck.add(srcDeck.removeSurfaceCard());
-//                        return true;
-//                    }
-//                }
-//            } else if (srcLocation.getRow() < srcDeck.size() - 1) {
-//                int moveCount = srcDeck.size() - srcLocation.getRow();
-//                if (game.rules.isStrict()) {
-//                    if (moveCount <= game.getMaxMoveLength(dstDeck.isEmpty())) {
-//                        if (dstDeck.appendable(srcDeck.get(srcLocation.getRow()))) {
-//                            dstDeck.addAll(srcDeck.subList(srcLocation.getRow(), srcDeck.size()));
-//                            for (int i = 0; i < moveCount; ++i) {
-//                                srcDeck.removeSurfaceCard();
-//                            }
-//                            return true;
-//                        }
-//                    }
-//                } else {
-//                    if (dstDeck.appendable(srcDeck.get(srcLocation.getRow()))) {
-//                        dstDeck.addAll(srcDeck.subList(srcLocation.getRow(), srcDeck.size()));
-//                        for (int i = 0; i < moveCount; ++i) {
-//                            srcDeck.removeSurfaceCard();
-//                        }
-//                        return true;
-//                    }
-//                }
-//            }
-//            return false;
         }
 
         @Override

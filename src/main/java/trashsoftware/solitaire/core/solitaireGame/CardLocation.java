@@ -5,6 +5,7 @@ import trashsoftware.solitaire.fxml.controls.GameView;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.Function;
 
 public abstract class CardLocation {
     protected final SolitaireGame game;
@@ -41,10 +42,17 @@ public abstract class CardLocation {
     public abstract double[] cardLeftXY(GameView gameView);
 
     /**
-     * Reloads card from this location, returns the new loaded one.
+     * Reloads card from this location, or location processed by a function, returns the new loaded one.
+     * <p>
+     * If the child class does not override this method, returns {@link CardLocation#reloadLocation()}
      *
+     * @param processor a nullable functional processor
      * @return the new loaded one
      */
+    public CardLocation reloadLocation(Function<Integer, Integer> processor) {
+        return reloadLocation();
+    }
+
     public abstract CardLocation reloadLocation();
 
     public abstract static class SingleCardLocation extends CardLocation {
@@ -102,9 +110,15 @@ public abstract class CardLocation {
 
         @Override
         public CardLocation reloadLocation() {
+            return reloadLocation(row -> row);
+        }
+
+        @Override
+        public CardLocation reloadLocation(Function<Integer, Integer> rowProcessor) {
             Card card = null;
-            if (row < game.getMainArea()[col].size()) card = game.getMainArea()[col].get(row);
-            return new MainLocation(game, card, col, row);
+            int newRow = rowProcessor.apply(row);
+            if (newRow < game.getMainArea()[col].size()) card = game.getMainArea()[col].get(newRow);
+            return new MainLocation(game, card, col, newRow);
         }
 
         @Override

@@ -55,4 +55,16 @@ public class SolitaireDeck extends ArrayList<Card> {
         }
         return true;
     }
+
+    public int getContinuousCount() {
+        if (isEmpty()) return 0;
+        int count = 1;
+        for (int i = size() - 2; i >= 0; --i) {
+            Card sur = get(i + 1);
+            Card next = get(i);
+            if (next.getNum() != sur.getNum() + 1 || sur.isBlack() == next.isBlack()) break;
+            count++;
+        }
+        return count;
+    }
 }

@@ -1,8 +1,6 @@
 package trashsoftware.solitaire.core.solitaireGame;
 
 
-import trashsoftware.solitaire.Main;
-
 import java.util.*;
 
 public class SolitaireGame {
@@ -131,6 +129,132 @@ public class SolitaireGame {
             builder.append(i).append(": ").append(deck.toString()).append("\n");
         }
         return builder.toString();
+    }
+
+    public SolitaireHint getHint() {
+        List<SolitaireHint> hints = new ArrayList<>();
+        for (int c = 0; c < mainArea.length; ++c) {
+            SolitaireDeck deck = mainArea[c];
+            if (deck.isEmpty()) {
+                hints.add(new SolitaireHint(
+                        null,
+                        new CardLocation.MainLocation(
+                                this,
+                                null,
+                                c,
+                                0),  // all +1 for main destinations
+                        SolitaireHint.PRE_EMPTY_MAIN
+                ));
+                continue;
+            }
+
+            Card surface = deck.getSurfaceCard();
+
+            // try main to finished
+            if (SolitaireMove.movableToFinished(this, surface)) {
+                hints.add(new SolitaireHint(
+                        new CardLocation.MainLocation(
+                                this,
+                                surface,
+                                c,
+                                deck.size() - 1),
+                        createFinished(surface),
+                        SolitaireHint.PRE_MAIN_TO_FINISH));
+            }
+
+            // try main to main
+            int srcContinuous = deck.getContinuousCount();
+            for (int r = deck.size() - srcContinuous; r < deck.size(); ++r) {
+                CardLocation.MainLocation src = new CardLocation.MainLocation(
+                        this,
+                        deck.get(r),
+                        c,
+                        r
+                );
+                int moveCount = deck.size() - r;
+                for (int dc = 0; dc < mainArea.length; ++dc) {
+                    if (dc != c) {
+                        SolitaireDeck dstDeck = mainArea[dc];
+                        CardLocation.MainLocation dst = new CardLocation.MainLocation(
+                                this,
+                                dstDeck.getSurfaceCard(),
+                                dc,
+                                dstDeck.size() - 1
+                        );
+                        SolitaireMove move = new SolitaireMove.MainToMain(
+                                this, src, dst
+                        );
+                        if (move.movable()) {
+                            int dstContinuousAfter = dstDeck.getContinuousCount() + moveCount;
+                            if (dstContinuousAfter > srcContinuous) {
+                                // longer continuous after move
+                                hints.add(new SolitaireHint(
+                                        src,
+                                        dst,
+                                        SolitaireHint.PRE_MAIN_TO_MAIN));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // try space area
+        for (int pos = 0; pos < spaceArea.length; ++pos) {
+            CardLocation.SpaceLocation spaceLocation = new CardLocation.SpaceLocation(
+                    this, spaceArea[pos], pos
+            );
+
+            // use this space
+            if (spaceArea[pos] == null) {
+                hints.add(new SolitaireHint(
+                        null,
+                        spaceLocation,
+                        SolitaireHint.PRE_EMPTY_SPACE
+                ));
+                continue;
+            }
+
+            // try space to finished
+            if (SolitaireMove.movableToFinished(this, spaceArea[pos])) {
+                hints.add(new SolitaireHint(
+                        spaceLocation,
+                        createFinished(spaceArea[pos]),
+                        SolitaireHint.PRE_SPACE_TO_FINISH
+                ));
+            }
+
+            // try space to main
+            for (int c = 0; c < mainArea.length; ++c) {
+                SolitaireDeck deck = mainArea[c];
+                if (deck.appendable(spaceArea[pos])) {
+                    hints.add(new SolitaireHint(
+                            spaceLocation,
+                            new CardLocation.MainLocation(
+                                    this,
+                                    deck.getSurfaceCard(),
+                                    c,
+                                    deck.size() - 1
+                            ),
+                            SolitaireHint.PRE_SPACE_TO_MAIN
+                    ));
+                }
+            }
+        }
+
+        if (hints.isEmpty()) return null;
+
+        Collections.sort(hints);
+
+        return hints.get(0);
+    }
+
+    private CardLocation.FinishedLocation createFinished(Card card) {
+        return new CardLocation.FinishedLocation(
+                this,
+                finishedArea[card.getSuit()].getSurfaceCard(),
+                card.getSuit()
+        );
     }
 
     public boolean movable(SolitaireMove move) {

@@ -14,6 +14,7 @@ import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.Alert;
 import javafx.scene.control.MenuItem;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.paint.Paint;
 import javafx.scene.text.Font;
@@ -39,6 +40,7 @@ public class GameView implements Initializable {
     private static final Paint CARD = Paint.valueOf("white");
     private static final Paint HIGHLIGHT = Paint.valueOf("gold");
     private static final Paint TEXT = Paint.valueOf("black");
+    private static final Paint HINT = Paint.valueOf("yellow");
     private static final int NOT_IN_AREA = -1;
     private static final int IN_AREA_NOT_AT_CARD = -2;
     private static final int[] NOT_IN_AREA_ARRAY = null;
@@ -53,20 +55,26 @@ public class GameView implements Initializable {
     private final double mainSpacing = 40.0;
     private final double areaSpacing = 10.0;  // card real spacing for finished area and space area
     private final double width = cardWidth * 8 + mainSpacing * 10;
+    private final double mainAreaY = areaSpacing * 3 + blockHeight;
+    private final double firstRowY = mainAreaY + cardBorder;
+    private final int prefRowsCount = 10;
+    private final double prefHeight = requiredHeightOfMain(prefRowsCount);
     private final double timerY = 20.0;
+    @FXML
+    ScrollPane basePane;
     @FXML
     Canvas canvas;
     @FXML
     MenuItem undoItem, autoFinishItem;
-    private double height = cardFullHeight * 6;
+
     private double animationDuration = 500.0;
     private double frameTime = 25.0;
-    private double firstRowY;
     private GraphicsContext graphicsContext;
     private Stage stage;
 
     private SolitaireGame game;
     private CardLocation selected;
+    private SolitaireHint hint;
     private boolean started = false;
     private boolean finished = false;
 
@@ -94,20 +102,12 @@ public class GameView implements Initializable {
 
     @FXML
     void undoAction() {
+        clearHint();
         if (game.hasMoveToUndo()) {  // double check
             SolitaireMove move = game.getLastDoneMove();
 
             CardLocation dst = move.getDstLocation();
-            CardLocation realDstLocation;
-            if (dst instanceof CardLocation.MainLocation) {
-                // in a move to main, the actual dst location is the next row
-                CardLocation.MainLocation mainLocation = (CardLocation.MainLocation) dst;
-                realDstLocation = new CardLocation.MainLocation(
-                        game,
-                        mainLocation.getCard(),
-                        mainLocation.getCol(),
-                        mainLocation.getRow() + 1);
-            } else realDstLocation = dst.reloadLocation();
+            CardLocation realDstLocation = dst.reloadLocation(row -> row + 1);
 
             animation(realDstLocation, move.getSrcLocation(), e -> {
                 game.undo();
@@ -119,7 +119,24 @@ public class GameView implements Initializable {
     }
 
     @FXML
+    void hintAction() {
+        if (animatingCards != null) return;
+        selected = null;
+        hint = game.getHint();
+        if (hint != null) {
+            if (hint.getSrcLocation() != null) {
+                if (hint.getSrcLocation().getCard() == null) {
+                    throw new SolitaireException("Unexpected hint.");
+                }
+                selected = hint.getSrcLocation();
+            }
+        }
+        draw();
+    }
+
+    @FXML
     void autoFinishAction() {
+        clearHint();
         autoFinishOneStep();
     }
 
@@ -170,7 +187,7 @@ public class GameView implements Initializable {
     }
 
     void onCanvasClicked(MouseEvent event) {
-//        System.out.println("click");
+        clearHint();
         if (!started) {
             started = true;
             timer.scheduleAtFixedRate(new GameTimerTask(), 1000, 1000);
@@ -193,6 +210,7 @@ public class GameView implements Initializable {
     }
 
     void onCanvasDragStarted(MouseEvent event) {
+        clearHint();
         if (finished) return;
         if (!started) {
             started = true;
@@ -245,10 +263,7 @@ public class GameView implements Initializable {
     }
 
     void onCanvasDragReleased(MouseEvent event, DraggedCards dragging) {
-//        System.out.println("drag released");
         CardLocation dstLocation = getCardLocation(event.getX(), event.getY());
-//        System.out.println("src at " + dragging.srcLocation);
-//        System.out.println("dst at " + dstLocation);
         if (dstLocation != null) {
             SolitaireMove move = dragging.srcLocation.createMove(dstLocation);
             if (directMoveAction(move)) {
@@ -260,13 +275,12 @@ public class GameView implements Initializable {
     }
 
     void onCanvasDragged(MouseEvent event) {
-//        System.out.println(event.getX() + ", " + event.getY());
         long cur = System.currentTimeMillis();
         long dragTime = cur - lastDragTime;
         if (dragTime >= frameTime) {
             curMouseX = event.getX();
             curMouseY = event.getY();
-            if (curMouseX < 0 || curMouseY < 0 || curMouseX >= width || curMouseY >= height) {
+            if (curMouseX < 0 || curMouseY < 0 || curMouseX >= width || curMouseY >= canvas.getHeight()) {
                 draggedCards = null;
                 draw();
                 return;
@@ -290,11 +304,7 @@ public class GameView implements Initializable {
             if (move.getDstLocation() instanceof CardLocation.MainLocation) {
                 // in a move to main, the actual dst location is the next row
                 CardLocation.MainLocation mainLocation = (CardLocation.MainLocation) move.getDstLocation();
-                realDstLocation = new CardLocation.MainLocation(
-                        game,
-                        mainLocation.getCard(),
-                        mainLocation.getCol(),
-                        mainLocation.getRow() + 1);
+                realDstLocation = mainLocation.reloadLocation(row -> row + 1);
             } else realDstLocation = move.getDstLocation();
 
             animation(move.getSrcLocation(), realDstLocation, e -> {
@@ -420,6 +430,7 @@ public class GameView implements Initializable {
         if (game.wining()) {
             finish();
             Alert alert = new Alert(Alert.AlertType.INFORMATION);
+            alert.setTitle(Main.getBundle().getString("appName"));
             alert.setHeaderText(Main.getBundle().getString("winMessage"));
             alert.setContentText(
                     String.format(Main.getBundle().getString("winMsgFmt"), timerText, game.getStepsCount()));
@@ -447,7 +458,7 @@ public class GameView implements Initializable {
 
     private void drawGrid() {
         graphicsContext.setFill(BACKGROUND);
-        graphicsContext.fillRect(0, 0, width, height);
+        graphicsContext.fillRect(0, 0, width, canvas.getHeight());
 
         // finish area
         graphicsContext.setStroke(LINE);
@@ -465,17 +476,19 @@ public class GameView implements Initializable {
             x -= blockWidth + areaSpacing - cardBorder;
         }
 
-        // separate
-        graphicsContext.strokeLine(0, areaSpacing * 2 + blockHeight, width, areaSpacing * 2 + blockHeight);
+        // separate line
+        graphicsContext.strokeLine(0, mainAreaY - areaSpacing, width, mainAreaY - areaSpacing);
 
         // main blocks
-        double y = areaSpacing * 3 + blockHeight;
-        firstRowY = y + cardBorder;
         x = mainSpacing - cardBorder;
         for (int i = 0; i < 8; ++i) {
-            graphicsContext.strokeRect(x, y, blockWidth, blockHeight);
+            graphicsContext.strokeRect(x, mainAreaY, blockWidth, blockHeight);
             x += blockWidth + mainSpacing - cardBorder;
         }
+    }
+
+    private double requiredHeightOfMain(int rowCount) {
+        return xyOfMain(0, rowCount - 1)[1] + cardFullHeight + cardGapHeight;
     }
 
     public double[] xyOfMain(int col, int row) {
@@ -574,6 +587,15 @@ public class GameView implements Initializable {
     }
 
     private void drawCardsInMain() {
+        int maxSize = 0;
+        for (int col = 0; col < 8; ++col) {
+            SolitaireDeck deck = game.getMainArea()[col];
+            if (deck.size() > maxSize) maxSize = deck.size();
+        }
+
+        double targetHeight = requiredHeightOfMain(Math.max(prefRowsCount, maxSize));
+        if (canvas.getHeight() != targetHeight) canvas.setHeight(targetHeight);
+
         for (int col = 0; col < 8; ++col) {
             SolitaireDeck deck = game.getMainArea()[col];
             for (int row = 0; row < deck.size(); ++row) {
@@ -644,25 +666,37 @@ public class GameView implements Initializable {
         }
     }
 
+    private void drawHints() {
+        if (hint != null) {
+            double[] xy = hint.getDstLocation().reloadLocation(row -> row + 1).cardLeftXY(this);
+            drawHighlight(xy[0], xy[1], HINT);
+        }
+    }
+
+    private void clearHint() {
+        if (hint != null) {
+            hint = null;
+            draw();
+        }
+    }
+
+    private void drawHighlight(double x, double y, Paint paint) {
+        graphicsContext.setStroke(paint);
+        graphicsContext.setLineWidth(5.0);
+        graphicsContext.strokeRoundRect(x + 4.0, y + 4.0,
+                cardWidth - 8.0, cardFullHeight - 8.0,
+                10.0, 10.0);
+    }
+
     private void drawCard(Card card, double x, double y) {
         graphicsContext.setStroke(CARD_LINE);
         graphicsContext.setLineWidth(3.0);
-//        Rectangle rectangle = new Rectangle(cardWidth, cardFullHeight, RED);
-//        rectangle.setX(55.0);
-//        rectangle.setArcHeight(10.0);
-//        rectangle.setArcWidth(10.0);
-//        basePane.getChildren().clear();
-//        basePane.getChildren().add(rectangle);
 
         graphicsContext.strokeRoundRect(x, y, cardWidth, cardFullHeight, 10.0, 10.0);
         graphicsContext.setFill(CARD);
         graphicsContext.fillRoundRect(x, y, cardWidth, cardFullHeight, 10.0, 10.0);
         if (selected != null && selected.isSelected(card)) {
-            graphicsContext.setStroke(HIGHLIGHT);
-            graphicsContext.setLineWidth(5.0);
-            graphicsContext.strokeRoundRect(x + 4.0, y + 4.0,
-                    cardWidth - 8.0, cardFullHeight - 8.0,
-                    10.0, 10.0);
+            drawHighlight(x, y, HIGHLIGHT);
         }
 
         graphicsContext.setFill(card.isBlack() ? BLACK : RED);
@@ -687,6 +721,7 @@ public class GameView implements Initializable {
         drawCardsInSpace();
         drawDraggingCards();
         drawAnimatingCards();
+        drawHints();
     }
 
     private void startNewGame() {
@@ -711,7 +746,9 @@ public class GameView implements Initializable {
     private void setupCanvas() {
         graphicsContext.setTextAlign(TextAlignment.CENTER);
         canvas.setWidth(width);
-        canvas.setHeight(height);
+        canvas.setHeight(prefHeight);
+        basePane.setPrefWidth(width + 4.0);
+        basePane.setPrefHeight(prefHeight + 4.0);
 
         canvas.setOnMouseClicked(this::onCanvasClicked);
         canvas.setOnMouseDragged(this::onCanvasDragged);
