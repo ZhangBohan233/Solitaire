@@ -26,6 +26,11 @@ public class SolitaireDeck extends ArrayList<Card> {
         else return remove(size() - 1);
     }
 
+    public Card removeSurfaceCardIfNotEmpty() {
+        if (isEmpty()) return null;
+        else return remove(size() - 1);
+    }
+
     public SolitaireDeck removeToSize(int targetSize) {
         int removeCount = size() - targetSize;
         SolitaireDeck rtn = new SolitaireDeck(subList(targetSize, size()));

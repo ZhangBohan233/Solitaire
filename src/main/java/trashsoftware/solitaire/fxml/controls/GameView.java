@@ -1,5 +1,6 @@
 package trashsoftware.solitaire.fxml.controls;
 
+import javafx.animation.Animation;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
 import javafx.event.ActionEvent;
@@ -13,6 +14,7 @@ import javafx.scene.Scene;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.Alert;
+import javafx.scene.control.Menu;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.input.MouseEvent;
@@ -66,9 +68,12 @@ public class GameView implements Initializable {
     Canvas canvas;
     @FXML
     MenuItem undoItem, autoFinishItem;
+    @FXML
+    Menu editMenu;
 
     private double animationDuration = 500.0;
     private double frameTime = 25.0;
+    private double endAnimationFrameTime = 25.0;
     private GraphicsContext graphicsContext;
     private Stage stage;
 
@@ -183,7 +188,7 @@ public class GameView implements Initializable {
 
     @FXML
     void restartGameAction() {
-
+        restartGame();
     }
 
     void onCanvasClicked(MouseEvent event) {
@@ -327,6 +332,13 @@ public class GameView implements Initializable {
         animationLine.play();
     }
 
+    private void playEndingAnimation() {
+        Timeline timeline = new Timeline();
+        timeline.setCycleCount(Animation.INDEFINITE);
+        timeline.getKeyFrames().add(new KeyFrame(Duration.millis(endAnimationFrameTime), new EndAnimation(timeline)));
+        timeline.play();
+    }
+
     private void singleClick(double x, double y) {
         CardLocation newSelection = getCardLocation(x, y);
 
@@ -429,13 +441,7 @@ public class GameView implements Initializable {
     private void checkWin() {
         if (game.wining()) {
             finish();
-            Alert alert = new Alert(Alert.AlertType.INFORMATION);
-            alert.setTitle(Main.getBundle().getString("appName"));
-            alert.setHeaderText(Main.getBundle().getString("winMessage"));
-            alert.setContentText(
-                    String.format(Main.getBundle().getString("winMsgFmt"), timerText, game.getStepsCount()));
-            alert.initOwner(stage);
-            alert.show();
+            playEndingAnimation();
         }
     }
 
@@ -445,15 +451,20 @@ public class GameView implements Initializable {
         setButtonsStatus();
     }
 
+    private void showWinMsg() {
+        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        alert.setTitle(Main.getBundle().getString("appName"));
+        alert.setHeaderText(Main.getBundle().getString("winMessage"));
+        alert.setContentText(
+                String.format(Main.getBundle().getString("winMsgFmt"), timerText, game.getStepsCount()));
+        alert.initOwner(stage);
+        alert.show();
+    }
+
     private void setButtonsStatus() {
-        undoItem.setDisable(finished
-                || !game.hasMoveToUndo()
-                || animatingCards != null
-        );
-        autoFinishItem.setDisable(finished
-                || !game.canAutoFinish()
-                || animatingCards != null
-        );
+        editMenu.setDisable(finished || animatingCards != null);
+        undoItem.setDisable(!game.hasMoveToUndo());
+        autoFinishItem.setDisable(!game.canAutoFinish());
     }
 
     private void drawGrid() {
@@ -668,7 +679,7 @@ public class GameView implements Initializable {
 
     private void drawHints() {
         if (hint != null) {
-            double[] xy = hint.getDstLocation().reloadLocation(row -> row + 1).cardLeftXY(this);
+            double[] xy = hint.getDstLocation().reloadLocation(row -> row == -1 ? 0 : row).cardLeftXY(this);
             drawHighlight(xy[0], xy[1], HINT);
         }
     }
@@ -730,6 +741,15 @@ public class GameView implements Initializable {
                         .initialFinishes(SolitaireRules.loadInitialFinishes())
                         .strict(!Configs.getBoolean("casual"))
                         .build());
+        setStartGameUi();
+    }
+
+    private void restartGame() {
+        game.restartGame();
+        setStartGameUi();
+    }
+
+    private void setStartGameUi() {
         if (timer != null) {
             timer.cancel();
         }
@@ -844,6 +864,72 @@ public class GameView implements Initializable {
                     ", x=" + x +
                     ", y=" + y +
                     '}';
+        }
+    }
+
+    private class EndAnimation implements EventHandler<ActionEvent> {
+
+        private final Timeline timeline;
+        private final SolitaireDeck[] decks = new SolitaireDeck[4];
+        private int count;
+        private FlyingCard flyingCard;
+
+        EndAnimation(Timeline timeline) {
+            this.timeline = timeline;
+            for (int i = 0; i < 4; ++i) {
+                decks[i] = new SolitaireDeck(game.getFinishedArea()[i]);
+            }
+            generateNextCard();
+        }
+
+        @Override
+        public void handle(ActionEvent event) {
+            if (flyingCard.x < -cardWidth || flyingCard.x >= width) {
+                generateNextCard();
+            } else {
+                drawCard(flyingCard.card, flyingCard.x, flyingCard.y);
+                flyingCard.refreshPosition();
+            }
+        }
+
+        private void generateNextCard() {
+            double[] initPos = xyOfFinished(count % 4);
+            Card card = decks[count++ % 4].removeSurfaceCardIfNotEmpty();
+            if (card == null) {
+                timeline.stop();
+                showWinMsg();
+            }
+            flyingCard = new FlyingCard(card, initPos[0], initPos[1]);
+        }
+    }
+
+    private class FlyingCard {
+        private static final double yAcc = 320.0;
+        private final Card card;
+        private final double bounceRate = 0.75 + Math.random() / 10.0;
+        private double x, y;
+        private double xSpeed;  // per second
+        private double ySpeed;  // per second
+
+        FlyingCard(Card card, double startX, double startY) {
+            this.card = card;
+            this.x = startX;
+            this.y = startY;
+            this.xSpeed = (Math.random() - 0.4) * 1000;  // (-400, 600)
+            if (Math.abs(xSpeed) < 75) {
+                if (xSpeed < 0) xSpeed = -75.0;
+                else xSpeed = 75.0;
+            }
+        }
+
+        private void refreshPosition() {
+            double frameRate = 1000.0 / endAnimationFrameTime;
+            if (y + cardFullHeight > prefHeight && ySpeed >= 0) {
+                ySpeed = -ySpeed * bounceRate;
+            }
+            x += xSpeed / frameRate;
+            y += ySpeed / frameRate;
+            ySpeed += yAcc / frameRate;
         }
     }
 

@@ -15,7 +15,7 @@
             <MenuItem text="%startNewGame" onAction="#newGameAction"/>
             <MenuItem text="%restartGame" onAction="#restartGameAction"/>
         </Menu>
-        <Menu text="%edit">
+        <Menu fx:id="editMenu" text="%edit">
             <MenuItem fx:id="undoItem" text="%undo" onAction="#undoAction" disable="true"/>
             <MenuItem fx:id="autoFinishItem" text="%autoFinish" onAction="#autoFinishAction" disable="true"/>
             <MenuItem text="%hint" onAction="#hintAction"/>

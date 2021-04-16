@@ -38,6 +38,11 @@ public class SolitaireGame {
         return finishedArea;
     }
 
+    public void restartGame() {
+        while (hasMoveToUndo()) undo();
+        stepsCount = 0;
+    }
+
     public boolean canAutoFinish() {
         for (SolitaireDeck deck : mainArea) {
             if (deck.size() > 1) {
