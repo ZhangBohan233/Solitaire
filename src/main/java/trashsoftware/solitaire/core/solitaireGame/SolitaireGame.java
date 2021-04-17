@@ -14,6 +14,7 @@ public class SolitaireGame {
      */
     private final Deque<SolitaireMove> moves = new ArrayDeque<>();
     private int stepsCount = 0;
+    private int[] finalScore = null;
 
     public SolitaireGame(SolitaireRules rules) {
         this.rules = rules;
@@ -38,9 +39,14 @@ public class SolitaireGame {
         return finishedArea;
     }
 
+    public SolitaireRules getRules() {
+        return rules;
+    }
+
     public void restartGame() {
         while (hasMoveToUndo()) undo();
         stepsCount = 0;
+        finalScore = null;
     }
 
     public boolean canAutoFinish() {
@@ -298,6 +304,52 @@ public class SolitaireGame {
             if (surface == null || surface.getNum() != 13) return false;
         }
         return true;
+    }
+
+    private int getBaseScore() {
+        int initialFinishes = getRules().getInitialFinishes();
+        int finishedScore = 0;
+        for (SolitaireDeck deck : getFinishedArea()) {
+            if (deck.getSurfaceCard() != null) {
+                finishedScore += (deck.getSurfaceCard().getNum() - initialFinishes) * getRules().getEachCardScore();
+            }
+        }
+        return finishedScore;
+    }
+
+    /**
+     * @param seconds time used
+     * @return an integer array, in [currentScore, timeScore]
+     */
+    public int[] getCurScore(int seconds) {
+        int timeReduced = getTimerReduced(seconds);
+        return new int[]{getBaseScore(), timeReduced};
+    }
+
+    /**
+     * This method must be called after game finished.
+     *
+     * @param seconds time used
+     * @return an integer array, in [totalScore, baseScore, stepScore, timeReducedScore]
+     */
+    public int[] getFinalScore(int seconds) {
+        if (finalScore == null) {
+            int baseScore = getBaseScore();
+            int timeReduced = getTimerReduced(seconds);
+            int stepScore = wining() ?
+                    (int) ((double) getRules().getEachCardScore() / stepsCount * 1500 / getDifficultyMultiplier()) :
+                    0;
+            finalScore = new int[]{baseScore + stepScore - timeReduced, baseScore, stepScore, timeReduced};
+        }
+        return finalScore;
+    }
+
+    private int getTimerReduced(int seconds) {
+        return (int) (getRules().getEachCardScore() * getDifficultyMultiplier() / 50.0 * seconds);
+    }
+
+    private double getDifficultyMultiplier() {
+        return 1 + (getRules().getInitialFinishes() / 2.0);
     }
 
     public int getStepsCount() {

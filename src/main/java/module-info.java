@@ -3,6 +3,7 @@ module Solitaire {
     requires javafx.graphics;
     requires javafx.fxml;
     requires javafx.controls;
+    requires org.json;
 
     exports trashsoftware.solitaire;
     exports trashsoftware.solitaire.core.solitaireGame;

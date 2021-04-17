@@ -5,6 +5,7 @@ import trashsoftware.solitaire.util.Configs;
 public class SolitaireRules {
 
     private int initialFinishes = 0;
+    private int eachCardScore;
     private boolean strict = true;
 
     private SolitaireRules() {
@@ -21,6 +22,10 @@ public class SolitaireRules {
         return strict;
     }
 
+    public int getEachCardScore() {
+        return eachCardScore;
+    }
+
     public static class Builder {
         private final SolitaireRules rules = new SolitaireRules();
 
@@ -35,6 +40,8 @@ public class SolitaireRules {
         }
 
         public SolitaireRules build() {
+            rules.eachCardScore = (int) Math.pow(13 - rules.initialFinishes, 3);
+            if (!rules.strict) rules.eachCardScore = (int) (rules.eachCardScore * 0.75);
             return rules;
         }
     }

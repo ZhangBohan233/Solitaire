@@ -13,7 +13,6 @@ import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
-import javafx.scene.control.Alert;
 import javafx.scene.control.Menu;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.ScrollPane;
@@ -26,9 +25,13 @@ import javafx.util.Duration;
 import trashsoftware.solitaire.Main;
 import trashsoftware.solitaire.core.solitaireGame.*;
 import trashsoftware.solitaire.util.Configs;
+import trashsoftware.solitaire.util.SolitaireRankResult;
+import trashsoftware.solitaire.util.SolitaireRecord;
+import trashsoftware.solitaire.util.SolitaireRecorder;
 
 import java.io.IOException;
 import java.net.URL;
+import java.util.Date;
 import java.util.ResourceBundle;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -76,23 +79,36 @@ public class GameView implements Initializable {
     private double endAnimationFrameTime = 25.0;
     private GraphicsContext graphicsContext;
     private Stage stage;
+    private ResourceBundle bundle;
 
     private SolitaireGame game;
     private CardLocation selected;
     private SolitaireHint hint;
     private boolean started = false;
     private boolean finished = false;
+    private boolean recorded = false;
 
+    private Timeline winingAnimation;
     private DraggedCards draggedCards;
     private AnimatingCards animatingCards;
     private double curMouseX, curMouseY;
     private long lastDragTime;
 
     private Timer timer;
-    private String timerText;
+    private GameTimerTask timeCounter;
+    private int timerSeconds;
+    private SolitaireRankResult rankedScores;
+
+    private static String secondsToString(int seconds) {
+        int minutes = seconds / 60;
+        int sec = seconds % 60;
+        return String.format("%02d:%02d", minutes, sec);
+    }
 
     @Override
     public void initialize(URL location, ResourceBundle resources) {
+        this.bundle = resources;
+
         graphicsContext = canvas.getGraphicsContext2D();
 
         setupCanvas();
@@ -195,7 +211,12 @@ public class GameView implements Initializable {
         clearHint();
         if (!started) {
             started = true;
-            timer.scheduleAtFixedRate(new GameTimerTask(), 1000, 1000);
+            timeCounter = new GameTimerTask();
+            timer.scheduleAtFixedRate(timeCounter, 1000, 1000);
+        }
+        if (winingAnimation != null) {
+            terminateWiningAnimation();
+            return;
         }
         if (finished) return;
         if (draggedCards != null) {
@@ -333,10 +354,18 @@ public class GameView implements Initializable {
     }
 
     private void playEndingAnimation() {
-        Timeline timeline = new Timeline();
-        timeline.setCycleCount(Animation.INDEFINITE);
-        timeline.getKeyFrames().add(new KeyFrame(Duration.millis(endAnimationFrameTime), new EndAnimation(timeline)));
-        timeline.play();
+        winingAnimation = new Timeline();
+        winingAnimation.setCycleCount(Animation.INDEFINITE);
+        winingAnimation.getKeyFrames().add(
+                new KeyFrame(Duration.millis(endAnimationFrameTime),
+                        new EndAnimation(winingAnimation)));
+        winingAnimation.play();
+    }
+
+    private void terminateWiningAnimation() {
+        winingAnimation.stop();
+        winingAnimation = null;
+        showWinMsg();
     }
 
     private void singleClick(double x, double y) {
@@ -434,8 +463,15 @@ public class GameView implements Initializable {
         double fontSize = 18.0;
         graphicsContext.setFill(TEXT);
         graphicsContext.setFont(new Font(fontSize));
-        graphicsContext.fillText(timerText, width / 2, timerY + fontSize / 2);
-        graphicsContext.fillText(String.valueOf(game.getStepsCount()), width / 2, timerY + fontSize * 2);
+        graphicsContext.fillText(secondsToString(timerSeconds), width / 2, timerY + fontSize * 0.5);  // timer
+        graphicsContext.fillText(
+                String.valueOf(game.getStepsCount()), width / 2, timerY + fontSize * 2.0);  // steps
+        int[] curScore = game.getCurScore(timerSeconds);
+        graphicsContext.fillText(
+                SolitaireRecorder.DECIMAL_FORMAT.format(curScore[0]) + " - " +
+                        SolitaireRecorder.DECIMAL_FORMAT.format(curScore[1]),
+                width / 2,
+                timerY + fontSize * 3.5);  // score
     }
 
     private void checkWin() {
@@ -448,17 +484,22 @@ public class GameView implements Initializable {
     private void finish() {
         finished = true;
         timer.cancel();
+        recordResult();
         setButtonsStatus();
     }
 
-    private void showWinMsg() {
-        Alert alert = new Alert(Alert.AlertType.INFORMATION);
-        alert.setTitle(Main.getBundle().getString("appName"));
-        alert.setHeaderText(Main.getBundle().getString("winMessage"));
-        alert.setContentText(
-                String.format(Main.getBundle().getString("winMsgFmt"), timerText, game.getStepsCount()));
-        alert.initOwner(stage);
-        alert.show();
+    private void recordResult() {
+        if (game == null || !started || recorded) return;
+        int[] finalScore = game.getFinalScore(timerSeconds);
+        SolitaireRecord record = new SolitaireRecord(
+                game.getRules().getInitialFinishes(),
+                timerSeconds,
+                finalScore[0],
+                game.getStepsCount(),
+                new Date()
+        );
+        rankedScores = SolitaireRecorder.put(record);
+        recorded = true;
     }
 
     private void setButtonsStatus() {
@@ -735,6 +776,59 @@ public class GameView implements Initializable {
         drawHints();
     }
 
+    private void drawWin() {
+        drawGrid();
+        drawInfoText();
+
+        double x = width / 2;
+
+        graphicsContext.setFont(new Font(28));
+        graphicsContext.setFill(TEXT);
+        graphicsContext.fillText(bundle.getString("winMessage"), x, 200.0);
+
+        int[] finalScore = game.getFinalScore(timerSeconds);
+        String scoreString =
+                SolitaireRecorder.DECIMAL_FORMAT.format(finalScore[0]) +
+                        " = " +
+                        SolitaireRecorder.DECIMAL_FORMAT.format(finalScore[1]) +
+                        " + " +
+                        SolitaireRecorder.DECIMAL_FORMAT.format(finalScore[2]) +
+                        " - " +
+                        SolitaireRecorder.DECIMAL_FORMAT.format(finalScore[3]);
+        String toDraw = String.format(bundle.getString("winMsgFmt"),
+                secondsToString(timerSeconds),
+                game.getStepsCount(),
+                scoreString);
+        graphicsContext.setFont(new Font(20));
+        graphicsContext.fillText(toDraw, x, 250.0);
+
+        double leftX = width * 0.38;
+        double rightX = width * 0.62;
+        double startY = 330.0;
+        graphicsContext.fillText(bundle.getString("score"), leftX, startY);
+        graphicsContext.fillText(bundle.getString("rank"), x, startY);
+        graphicsContext.fillText(bundle.getString("best"), rightX, startY);
+        graphicsContext.fillText(String.valueOf(finalScore[0]), leftX, startY + 30.0);
+        graphicsContext.fillText(String.valueOf(rankedScores.scoreRank + 1), x, startY + 30.0);
+        graphicsContext.fillText(
+                String.valueOf(rankedScores.stepsBest == null ? "-" : rankedScores.scoreBest.score),
+                rightX, startY + 30.0);
+        graphicsContext.fillText(String.valueOf(timerSeconds), leftX, startY + 60.0);
+        graphicsContext.fillText(String.valueOf(rankedScores.timeRank + 1), x, startY + 60.0);
+        graphicsContext.fillText(
+                String.valueOf(rankedScores.timeBest == null ? "-" : rankedScores.timeBest.seconds),
+                rightX, startY + 60.0);
+        graphicsContext.fillText(String.valueOf(game.getStepsCount()), leftX, startY + 90.0);
+        graphicsContext.fillText(String.valueOf(rankedScores.stepsRank + 1), x, startY + 90.0);
+        graphicsContext.fillText(
+                String.valueOf(rankedScores.stepsBest == null ? "-" : rankedScores.stepsBest.steps),
+                rightX, startY + 90.0);
+    }
+
+    private void showWinMsg() {
+        drawWin();
+    }
+
     private void startNewGame() {
         game = new SolitaireGame(
                 new SolitaireRules.Builder()
@@ -754,9 +848,11 @@ public class GameView implements Initializable {
             timer.cancel();
         }
         timer = new Timer();
+        timeCounter = null;
         finished = false;
         started = false;
-        timerText = "00:00";
+        recorded = false;
+        timerSeconds = 0;
         selected = null;
         draggedCards = null;
 
@@ -896,8 +992,7 @@ public class GameView implements Initializable {
             double[] initPos = xyOfFinished(count % 4);
             Card card = decks[count++ % 4].removeSurfaceCardIfNotEmpty();
             if (card == null) {
-                timeline.stop();
-                showWinMsg();
+                terminateWiningAnimation();
             }
             flyingCard = new FlyingCard(card, initPos[0], initPos[1]);
         }
@@ -981,19 +1076,11 @@ public class GameView implements Initializable {
     }
 
     private class GameTimerTask extends TimerTask {
-        private int seconds;
 
         @Override
         public void run() {
-            seconds++;
-            timerText = secondsToString();
+            timerSeconds++;
             draw();
-        }
-
-        private String secondsToString() {
-            int minutes = seconds / 60;
-            int sec = seconds % 60;
-            return String.format("%02d:%02d", minutes, sec);
         }
     }
 }
