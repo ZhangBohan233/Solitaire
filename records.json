@@ -1,0 +1,34 @@
+{
+  "0": [
+    {
+      "date": "2021-04-19,04-28-55",
+      "score": 92507,
+      "seconds": 250,
+      "initFinishes": 0,
+      "steps": 90
+    },
+    {
+      "date": "2021-04-19,04-20-31",
+      "score": 82991,
+      "seconds": 310,
+      "initFinishes": 0,
+      "steps": 108
+    }
+  ],
+  "3": [
+    {
+      "date": "2021-04-19,04-36-37",
+      "score": 23705,
+      "seconds": 141,
+      "initFinishes": 3,
+      "steps": 65
+    },
+    {
+      "date": "2021-04-20,17-08-18",
+      "score": 14657,
+      "seconds": 226,
+      "initFinishes": 3,
+      "steps": 77
+    }
+  ]
+}

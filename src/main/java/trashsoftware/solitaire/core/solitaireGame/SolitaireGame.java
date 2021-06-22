@@ -345,7 +345,7 @@ public class SolitaireGame {
     }
 
     private int getTimerReduced(int seconds) {
-        return (int) (getRules().getEachCardScore() * getDifficultyMultiplier() / 50.0 * seconds);
+        return (int) (getRules().getEachCardScore() * getDifficultyMultiplier() / 20.0 * seconds);
     }
 
     private double getDifficultyMultiplier() {

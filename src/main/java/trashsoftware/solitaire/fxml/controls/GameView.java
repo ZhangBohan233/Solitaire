@@ -813,10 +813,10 @@ public class GameView implements Initializable {
         graphicsContext.fillText(
                 String.valueOf(rankedScores.stepsBest == null ? "-" : rankedScores.scoreBest.score),
                 rightX, startY + 30.0);
-        graphicsContext.fillText(String.valueOf(timerSeconds), leftX, startY + 60.0);
+        graphicsContext.fillText(secondsToString(timerSeconds), leftX, startY + 60.0);
         graphicsContext.fillText(String.valueOf(rankedScores.timeRank + 1), x, startY + 60.0);
         graphicsContext.fillText(
-                String.valueOf(rankedScores.timeBest == null ? "-" : rankedScores.timeBest.seconds),
+                rankedScores.timeBest == null ? "-" : secondsToString(rankedScores.timeBest.seconds),
                 rightX, startY + 60.0);
         graphicsContext.fillText(String.valueOf(game.getStepsCount()), leftX, startY + 90.0);
         graphicsContext.fillText(String.valueOf(rankedScores.stepsRank + 1), x, startY + 90.0);
@@ -854,6 +854,10 @@ public class GameView implements Initializable {
         recorded = false;
         timerSeconds = 0;
         selected = null;
+        animatingCards = null;
+        hint = null;
+        rankedScores = null;
+        winingAnimation = null;
         draggedCards = null;
 
         draw();
@@ -999,9 +1003,9 @@ public class GameView implements Initializable {
     }
 
     private class FlyingCard {
-        private static final double yAcc = 320.0;
+        private static final double yAcc = 400.0;
         private final Card card;
-        private final double bounceRate = 0.75 + Math.random() / 10.0;
+        private final double bounceRate = 0.75 + Math.random() / 10.0;  // (0.75, 0.85)
         private double x, y;
         private double xSpeed;  // per second
         private double ySpeed;  // per second
@@ -1010,7 +1014,7 @@ public class GameView implements Initializable {
             this.card = card;
             this.x = startX;
             this.y = startY;
-            this.xSpeed = (Math.random() - 0.4) * 1000;  // (-400, 600)
+            this.xSpeed = (Math.random() - 0.4) * 1250;  // (-400, 600)
             if (Math.abs(xSpeed) < 75) {
                 if (xSpeed < 0) xSpeed = -75.0;
                 else xSpeed = 75.0;
